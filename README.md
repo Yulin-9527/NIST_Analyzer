@@ -1,6 +1,6 @@
 # NIST Bin 分析工具
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.5-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
@@ -9,9 +9,11 @@
 ## 功能特色
 
 - **完整結構解析**: 自動解析 NIST bin 檔案結構，包含 Header、NV_RSV、IBB、WBIO 等區塊
+- **PDR 備份區塊驗證**: 支援 PDR (Platform Data Region) 備份區域驗證，包含 Backup NVRSV、IBB、WBIO
 - **RSA-2048 簽名驗證**: 驗證各區域的數位簽名完整性
+- **彈性化設定系統**: 可自訂公鑰位址、PDR 基底位址，設定持久化保存
 - **直覺化圖形介面**: 基於 PyQt6 的現代化深色主題介面
-- **詳細分析報告**: 生成包含十六進位數據、區塊分布、驗證結果的完整報告
+- **詳細分析報告**: 生成包含十六進位數據、區塊分布、驗證結果的完整 HTML 報告
 - **拖放操作**: 支援直接拖曳 bin 檔案到視窗進行分析
 - **書籤導航**: 報告內建快速跳轉功能，方便瀏覽大型檔案
 - **彩色狀態顯示**: 綠色/紅色標示驗證通過/失敗狀態
@@ -61,6 +63,7 @@
 顯示 NV_RSV、IBB、WBIO 三個區域的簽名驗證狀態：
 - ✓ 通過 (綠色) - 簽名有效
 - ✗ 失敗 (紅色) - 簽名無效或檔案損毀
+- 若啟用 PDR 驗證，同時顯示 Backup NVRSV、Backup IBB、Backup WBIO 的驗證結果
 
 #### 2. 結構摘要
 快速瀏覽所有區塊的位址、大小和說明，點擊區塊名稱可跳轉至詳細內容
@@ -72,6 +75,7 @@
 - **NV_RSV 資料區**: 保留配置區域及其簽名
 - **IBB 資料區**: Initial Boot Block 及其簽名
 - **WBIO 資料區**: Write Back I/O 及其簽名
+- **PDR 備份區塊** (選用): 包含 Backup Descriptor、Backup NVRSV、Backup IBB、Backup WBIO 及其簽名
 
 #### 4. 區塊分布圖
 以表格形式呈現各區塊的位址範圍、大小和佔比
@@ -82,6 +86,16 @@
 |--------|------|
 | `Ctrl+O` | 開啟檔案 |
 | `Ctrl+Q` | 結束程式 |
+
+### 進階設定
+
+程式提供以下可自訂設定項目 (功能表：**設定 → 公鑰位址與PDR設定**)：
+
+- **Public Key Address**: RSA 公鑰在 bin 檔案中的位址 (預設: 0x00034000)
+- **啟用 PDR 驗證**: 是否解析並驗證 PDR 備份區塊 (預設: 停用)
+- **PDR Base Address**: PDR 備份區域的基底位址 (預設: 0x00046000)
+
+所有設定會自動儲存至 `config.json`，下次啟動時自動載入。
 
 ## 技術規格
 
@@ -114,7 +128,13 @@
 - 不符合 NIST BIOS 規範
 
 ### Q3: 如何匯出分析報告？
-**A**: 程式會自動在執行檔所在目錄生成 Markdown 格式報告 (`report_檔名.md`)
+**A**: 程式會自動在執行檔所在目錄生成 HTML 格式報告 (`report_檔名.html`)，並在預設瀏覽器中開啟
+
+### Q4: PDR 驗證是什麼？我需要啟用嗎？
+**A**: PDR (Platform Data Region) 是 BIOS 中的備份區域，包含 NVRSV、IBB、WBIO 的備份資料。若您的 bin 檔案包含 PDR 區域且需要驗證備份資料的完整性，可在設定中啟用此功能
+
+### Q5: 如何修改公鑰位址？
+**A**: 透過功能表 **設定 → 公鑰位址與PDR設定**，輸入新的位址（十六進位格式，如 0x00034000），儲存後重新載入檔案即可
 
 ## 技術支援
 
@@ -126,7 +146,31 @@
 
 ## 版本歷程
 
+### v1.0.5 (2025-11-28)
+
+- **新增 PDR 備份區塊驗證功能**
+  - 支援解析 PDR (Platform Data Region) 備份區域
+  - 驗證 Backup NVRSV、Backup IBB、Backup WBIO 簽名
+  - 可選擇性啟用/停用 PDR 驗證
+  - PDR 架構圖獨立顯示於報告中
+- **新增設定檔系統**
+  - 實作 `config.json` 設定檔持久化保存
+  - 可自訂公鑰位址 (Public Key Address)
+  - 可設定 PDR 基底位址 (PDR Base Address)
+  - 設定於程式重啟後自動載入
+- **介面優化**
+  - 主畫面顯示當前公鑰位址與 PDR 驗證狀態
+  - 新增「設定」選單，提供公鑰與 PDR 參數調整介面
+  - PDR 驗證結果整合至摘要視窗
+  - 報告新增 PDR 區塊頁籤
+- **報告格式改進**
+  - 將報告格式從 Markdown 改為 HTML
+  - 報告自動在預設瀏覽器中開啟
+  - 支援互動式頁籤切換 (主區塊/PDR 區塊)
+  - 架構圖依位址自動排序顯示
+
 ### v1.0.1 (2025-11-10)
+
 - 首次發布
 - 支援 NIST BIOS Bin 檔案解析
 - RSA-2048 簽名驗證功能
