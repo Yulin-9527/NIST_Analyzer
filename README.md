@@ -1,17 +1,18 @@
 # NIST Bin 分析工具
 
-![Version](https://img.shields.io/badge/version-1.0.5-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-一款簡易的 NIST BIOS Bin 檔案分析與驗證工具，提供圖形化介面，支援 RSA-2048 數位簽名驗證功能。
+一款簡易的 NIST BIOS Bin 檔案分析與驗證工具，提供圖形化介面，支援 RSA-2048 / RSA-4096 數位簽名驗證功能。
 
 ## 功能特色
 
 - **完整結構解析**: 自動解析 NIST bin 檔案結構，包含 Header、NV_RSV、IBB、WBIO 等區塊
 - **PDR 備份區塊驗證**: 支援 PDR (Platform Data Region) 備份區域驗證，包含 Backup NVRSV、IBB、WBIO
-- **RSA-2048 簽名驗證**: 驗證各區域的數位簽名完整性
-- **彈性化設定系統**: 可自訂公鑰位址、PDR 基底位址，設定持久化保存
+- **RSA-2048 / RSA-4096 簽名驗證**: 支援兩種金鑰長度，驗證各區域的數位簽名完整性
+- **略過 Header 模式**: 支援無 Header 的 bin 檔案，可手動指定 NV_RSV 與 BIOS 起始位址
+- **彈性化設定系統**: 可自訂公鑰位址、PDR 基底位址、RSA 金鑰大小、略過 Header 等，設定持久化保存
 - **直覺化圖形介面**: 基於 PyQt6 的現代化深色主題介面
 - **詳細分析報告**: 生成包含十六進位數據、區塊分布、驗證結果的完整 HTML 報告
 - **拖放操作**: 支援直接拖曳 bin 檔案到視窗進行分析
@@ -71,7 +72,7 @@
 #### 3. 詳細資料內容
 包含各區塊的完整十六進位數據：
 - **Header 區塊**: BIOS 檔頭資訊 (1024 bytes)
-- **RSA 公鑰**: 2048-bit RSA 公鑰 n 值 (256 bytes)
+- **RSA 公鑰**: RSA-2048 (256 bytes) 或 RSA-4096 (512 bytes) 公鑰 n 值
 - **NV_RSV 資料區**: 保留配置區域及其簽名
 - **IBB 資料區**: Initial Boot Block 及其簽名
 - **WBIO 資料區**: Write Back I/O 及其簽名
@@ -91,9 +92,13 @@
 
 程式提供以下可自訂設定項目 (功能表：**設定 → 公鑰位址與PDR設定**)：
 
+- **RSA 金鑰大小**: RSA-2048 或 RSA-4096 (預設: RSA-2048)
 - **Public Key Address**: RSA 公鑰在 bin 檔案中的位址 (預設: 0x00034000)
+- **略過 Header 解析**: 針對無 Header 的 bin 檔案，略過 Header 解析 (預設: 停用)
+  - **NV_RSV 起始位址**: 略過 Header 時，手動指定 NV_RSV 起始位址 (預設: 0x00020000)
+  - **BIOS 起始位址**: 略過 Header 時，手動指定 BIOS 起始位址 (預設: 0x00000000)
 - **啟用 PDR 驗證**: 是否解析並驗證 PDR 備份區塊 (預設: 停用)
-- **PDR Base Address**: PDR 備份區域的基底位址 (預設: 0x00046000)
+- **PDR Base Address**: PDR 備份區域的基底位址 (預設: 0x00046000)；略過 Header 時，此位址直接作為備份 NV_RSV 的起點（無 flash descriptor）
 
 所有設定會自動儲存至 `config.json`，下次啟動時自動載入。
 
@@ -104,13 +109,15 @@
 
 ### 解析結構
 - **Header**: 0x00000000 (1024 bytes)
-- **RSA 公鑰**: 0x00034000 (256 bytes, 2048-bit)
-- **NV_RSV**: 可變位址 (61440 bytes + 256 bytes 簽名)
-- **IBB**: 可變位址與大小 (+ 256 bytes 簽名)
-- **WBIO**: 可變位址與大小 (+ 256 bytes 簽名)
+- **RSA 公鑰**: 0x00034000 (RSA-2048: 256 bytes / RSA-4096: 512 bytes)
+- **NV_RSV**: 可變位址 (61440 bytes + 簽名)
+- **IBB**: 可變位址與大小 (+ 簽名)
+- **WBIO**: 可變位址與大小 (+ 簽名)
 
 ### 簽名驗證機制
-採用 RSA-2048 PKCS#1 v1.5 驗證機制，使用 SHA-256 雜湊演算法
+
+- **RSA-2048**: PKCS#1 v1.5，SHA-256 雜湊，256 bytes 簽名
+- **RSA-4096**: PKCS#1 v1.5，SHA-384 雜湊，512 bytes 簽名
 
 ## 常見問題
 
@@ -145,6 +152,20 @@
 3. 提供詳細的錯誤訊息和復現步驟
 
 ## 版本歷程
+
+### v1.0.6 (2026-02-04)
+
+- **新增 RSA-4096 簽名驗證支援**
+  - 支援 RSA-4096 + SHA-384 驗證機制
+  - 設定介面可切換 RSA-2048 / RSA-4096
+  - PDR 備份區塊簽名讀取長度依 RSA 金鑰大小自動調整
+- **新增略過 Header 模式**
+  - 支援無 Header 的 bin 檔案分析
+  - 可手動指定 NV_RSV 起始位址與 BIOS 起始位址
+  - 略過 Header 時，PDR Base Address 直接作為備份 NV_RSV 起點（無 flash descriptor）
+- **修正 PDR 備份區塊解析邏輯**
+  - 修正 skip_header 模式下 backup IBB/WBIO 位址計算錯誤
+  - 修正 PDR 簽名讀取從硬編碼 256 bytes 改為依 RSA 金鑰大小動態調整
 
 ### v1.0.5 (2025-11-28)
 
