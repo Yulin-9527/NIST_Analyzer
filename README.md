@@ -1,205 +1,230 @@
-[# NIST Bin 分析工具
+# NIST V2.1 BIOS Verifier
 
-![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+![ML-DSA-87](https://img.shields.io/badge/PQC-ML--DSA--87-purple.svg)
 
-一款簡易的 NIST BIOS Bin 檔案分析與驗證工具，提供圖形化介面，支援 RSA-2048 / RSA-4096 數位簽名驗證功能。
+離線檢查一整顆 SPI flash dump 是否通過 **NIST V2.1（D051 2.1）** 驗證的圖形化工具。
+拖一個 `.bin` 進來就好 —— BIOS base、EC region、NVRSV（primary / backup）、公鑰位址
+全部由 image 自己推導，不需要先填設定。
 
 ## 功能特色
 
-- **完整結構解析**: 自動解析 NIST bin 檔案結構，包含 Header、NV_RSV、IBB、WBIO 等區塊
-- **PDR 備份區塊驗證**: 支援 PDR (Platform Data Region) 備份區域驗證，包含 Backup NVRSV、IBB、WBIO
-- **RSA-2048 / RSA-4096 簽名驗證**: 支援兩種金鑰長度，驗證各區域的數位簽名完整性
-- **略過 Header 模式**: 支援無 Header 的 bin 檔案，可手動指定 NV_RSV 與 BIOS 起始位址
-- **彈性化設定系統**: 可自訂公鑰位址、PDR 基底位址、RSA 金鑰大小、略過 Header 等，設定持久化保存
-- **直覺化圖形介面**: 基於 PyQt6 的現代化深色主題介面
-- **詳細分析報告**: 生成包含十六進位數據、區塊分布、驗證結果的完整 HTML 報告
-- **拖放操作**: 支援直接拖曳 bin 檔案到視窗進行分析
-- **書籤導航**: 報告內建快速跳轉功能，方便瀏覽大型檔案
-- **彩色狀態顯示**: 綠色/紅色標示驗證通過/失敗狀態
+- **自動位址推導**：Flash Descriptor → BIOS base / PDR，EC region 由 6 個連續 `0xA5`
+  特徵定位，公鑰預設取 `EC 起點 + 0x30000`
+- **完整驗證鏈**：NVRSV 結構 → manifest hash（SHA-256 / SHA-384 / SHA-512）→
+  **ML-DSA-87 後量子簽章**（V2.0 image 自動改用 RSA PKCS#1 v1.5）→ NVD digest
+- **PQC 不會靜默跳過**：找不到公鑰時簽章驗證判為 **FAIL「未執行（缺公鑰）」**，
+  整體結果不會因為「沒驗」而變成 PASS
+- **位址來源透明**：每一側標明 **DYNAMIC**（descriptor 推導且真的命中 `_NV_RSV_`）、
+  **FALLBACK**（候選都沒中，改用掃描）或 **NONE**（該側沒有備份副本）
+- **建議 firmware 旗標**：依 image 產出 `oem_project.h` 片段
+  （`SUPPORT_INTEL_NVRSV_NVD_BLOCK`、`SUPPORT_NIST_NVRSV_FORCE_16M_OFFSET`、
+  `SUPPORT_NIST_NVD*` …），換 BIOS 時直接整段貼回
+- **原始資料檢視**：公鑰與簽章的前 / 後 256 bytes、每個 manifest 的起點 / size /
+  stored hash / 實算 hash，逐 byte 差異標紅
+- **報表輸出**：HTML（可折疊原始資料）與 JSON；另有 CLI 可批次跑
+- **離線執行**：不連網、不寫入任何 flash
 
 ## 系統需求
 
-- **作業系統**: Windows 10/11 (64-bit)
-- **記憶體**: 建議 4GB 以上
-- **儲存空間**: 50MB 可用空間
+- **作業系統**：Windows 10 / 11（64-bit）
+- **記憶體**：建議 4GB 以上
+- **儲存空間**：約 60MB
 
 ## 下載與安裝
 
-### 下載執行檔
+前往 [Releases](https://github.com/Yulin-9527/NIST_Analyzer/releases) 下載最新版
+`NIST_V21_Verifier.exe`。
 
-前往 [Releases](https://github.com/Yulin-9527/NIST_Analyzer/releases) 頁面下載最新版本的 `NIST_Analyzer.exe`
+本工具為免安裝版本：下載 → 放任意資料夾 → 雙擊執行。
 
-### 安裝步驟
-
-本工具為免安裝版本：
-
-1. 下載 `NIST_Analyzer.exe`
-2. 將檔案放置於任意資料夾
-3. 雙擊執行即可使用
-
-> **注意**: 首次執行時，Windows SmartScreen 可能會出現警告訊息，請點選「更多資訊」→「仍要執行」
+> **注意**：首次執行時 Windows SmartScreen 可能出現警告，請點「更多資訊」→「仍要執行」。
 
 ## 使用說明
 
 ### 基本操作
 
-#### 方法一：拖曳檔案
-1. 啟動 `NIST_Analyzer.exe`
-2. 將 `.bin` 檔案拖曳到視窗中
-3. 自動開始分析並顯示報告
+1. 啟動 `NIST_V21_Verifier.exe`
+2. 把 BIOS ROM（`.bin`）拖進視窗，或按 **瀏覽…** / `Ctrl+O`
+3. 按 **開始驗證**（或 `F5`）
 
-#### 方法二：功能表開啟
-1. 啟動程式
-2. 點選功能表 **檔案 → 載入檔案** (或按 `Ctrl+O`)
-3. 選擇要分析的 `.bin` 檔案
-4. 檢視分析結果
+驗證中會顯示進度條；完成後上方出現結論 banner：
 
-### 報告內容說明
+```
+✓ PASS — 這顆 BIOS 可通過 NIST V2.1 驗證
+✗ FAIL — PQC 簽章驗證：未執行（缺公鑰）
+```
 
-分析報告包含以下主要部分：
+### 欄位說明
 
-#### 1. 簽名驗證結果
-顯示 NV_RSV、IBB、WBIO 三個區域的簽名驗證狀態：
-- ✓ 通過 (綠色) - 簽名有效
-- ✗ 失敗 (紅色) - 簽名無效或檔案損毀
-- 若啟用 PDR 驗證，同時顯示 Backup NVRSV、Backup IBB、Backup WBIO 的驗證結果
+| 欄位 | 預設 | 說明 |
+|---|---|---|
+| **BIOS ROM** | — | 完整 flash dump（含 descriptor），不是 BIOS region only |
+| **EC 起點** | auto | 留空 = 在 image 內找 6 個連續 `0xA5`，取所在 block 的 4KB 邊界 |
+| **公鑰位址** | auto | 留空 = EC 起點 + `0x30000`（ML-DSA-87 公鑰 2592 B）|
+| **PDR→backup** | auto | 留空 = 依序試 `0x180000` / `0x1E0000` / `0x200000` |
+| **同時驗 backup** | 開 | 關掉就只驗 primary 側 |
 
-#### 2. 結構摘要
-快速瀏覽所有區塊的位址、大小和說明，點擊區塊名稱可跳轉至詳細內容
+公鑰來源：先讀 BIOS ROM 內的 EC（EC 起點 + `0x30000`）；該區是 `0xFF/0x00`
+（dump 沒帶 EC 或 EC 沒燒 key）時，才自動改用同目錄的 EC 檔。
 
-#### 3. 詳細資料內容
-包含各區塊的完整十六進位數據：
-- **Header 區塊**: BIOS 檔頭資訊 (1024 bytes)
-- **RSA 公鑰**: RSA-2048 (256 bytes) 或 RSA-4096 (512 bytes) 公鑰 n 值
-- **NV_RSV 資料區**: 保留配置區域及其簽名
-- **IBB 資料區**: Initial Boot Block 及其簽名
-- **WBIO 資料區**: Write Back I/O 及其簽名
-- **PDR 備份區塊** (選用): 包含 Backup Descriptor、Backup NVRSV、Backup IBB、Backup WBIO 及其簽名
+### 結果分頁
 
-#### 4. 區塊分布圖
-以表格形式呈現各區塊的位址範圍、大小和佔比
+| 分頁 | 內容 |
+|---|---|
+| **驗證結果** | 最上面是「驗證摘要」（PQC / manifest / NVD），往下是分組明細；每列可雙擊複製、滑過看完整內容 |
+| **建議 config** | 依 image 推導的 `oem_project.h` 旗標片段，可複製或匯出 |
+| **原始資料 (JSON)** | 完整結構化結果 |
+| **原始資料 (hex)** | 左邊選項目、右邊看 bytes；manifest 為 stored vs computed 逐 byte 對照 |
 
 ### 快捷鍵
 
 | 快捷鍵 | 功能 |
-|--------|------|
-| `Ctrl+O` | 開啟檔案 |
-| `Ctrl+Q` | 結束程式 |
+|---|---|
+| `Ctrl+O` | 開啟 BIOS ROM |
+| `F5` | 開始驗證 |
+| `Ctrl+H` / `Ctrl+J` | 匯出 HTML / JSON |
+| `Ctrl+K` | 匯出建議旗標 |
+| `F1` | 關於 |
+| `Ctrl+Q` | 結束 |
 
-### 進階設定
+## 判定規則
 
-程式提供以下可自訂設定項目 (功能表：**設定 → 公鑰位址與PDR設定**)：
+| 檢查 | 必要 |
+|---|---|
+| Flash Descriptor（FLVALSIG / FRBA / FLREG） | ✅ |
+| BIOS base（`byte@0x45` ×1MB + `byte@0x44` ×4KB） | ✅ |
+| NVRSV offset 命中 `_NV_RSV_`（固定 `0x20000` / size-aware 都試） | ✅ |
+| NVRSV 結構與 V2.1 佈局（含 `_NVD`） | ✅ |
+| 每個 manifest 的 hash 比對 | ✅ |
+| **PQC 簽章（ML-DSA-87）或 V2.0 的 RSA 簽章** | ✅（缺公鑰 = FAIL）|
+| backup 側 NVD digest（SHA-384） | ✅ |
+| primary 側 NVD digest | 僅警告（NVD 是活資料，digest 從寫下就過期）|
+| manifest 範圍與 NVD 重疊 | 警告（manifest 定義本身的問題）|
 
-- **RSA 金鑰大小**: RSA-2048 或 RSA-4096 (預設: RSA-2048)
-- **Public Key Address**: RSA 公鑰在 bin 檔案中的位址 (預設: 0x00034000)
-- **略過 Header 解析**: 針對無 Header 的 bin 檔案，略過 Header 解析 (預設: 停用)
-  - **NV_RSV 起始位址**: 略過 Header 時，手動指定 NV_RSV 起始位址 (預設: 0x00020000)
-  - **BIOS 起始位址**: 略過 Header 時，手動指定 BIOS 起始位址 (預設: 0x00000000)
-- **啟用 PDR 驗證**: 是否解析並驗證 PDR 備份區塊 (預設: 停用)
-- **PDR Base Address**: PDR 備份區域的基底位址 (預設: 0x00046000)；略過 Header 時，此位址直接作為備份 NV_RSV 的起點（無 flash descriptor）
+## 位址怎麼推導
 
-所有設定會自動儲存至 `config.json`，下次啟動時自動載入。
+| 項目 | 來源 |
+|---|---|
+| EC region | 6 個連續 `0xA5`，取所在 block 的 4KB 邊界（例：`0xA5` 在 `0x4040` → `0x4000`）；descriptor `dword@0x00` 僅作交叉檢查 |
+| 公鑰 | EC 起點 + `0x30000`（2592 B） |
+| BIOS base | `byte@0x45` × `0x100000` + `byte@0x44` × `0x1000`（與 `FLREG[1].base` 交叉驗證）|
+| primary NVRSV | BIOS base + offset（`0x20000` 或 `(bios_size − 16MB) + 0x20000`，取命中者）|
+| backup NVRSV | `FLREG[4].base` + `0x180000` / `0x1E0000` / `0x200000` + offset（命中才算 DYNAMIC）|
+
+## 建議 firmware 旗標（範例）
+
+```c
+#define SUPPORT_NIST_V2                 TRUE
+#define NIST_V2_SIG_SCHEME              NIST_V2_SIG_MLDSA87
+#define SUPPORT_INTEL_NVRSV_DYNAMIC     1
+#define SUPPORT_INTEL_NVRSV_NVD_BLOCK   1
+#define SUPPORT_NIST_NVRSV_FORCE_16M_OFFSET  1   // 這顆 image 實際用 +0x20000
+#define SUPPORT_NIST_NVD                1
+#define SUPPORT_NIST_NVD_WDT            1
+#define SUPPORT_NIST_NVD_RECOVERY       0
+#define SUPPORT_NIST_TEST_DISPATCH      1
+```
+
+完整片段（含註解與其餘旗標）由 GUI 的 **建議 config** 分頁產生。
+
+## 命令列
+
+```bash
+NIST_V21_Verifier.exe dump.bin              # 開 GUI 並驗證
+python verify_cli.py dump.bin               # 批次，exit code 0=PASS 1=FAIL
+python verify_cli.py *.bin --quiet          # 只印結論
+python verify_cli.py dump.bin --html r.html --json r.json
+python verify_cli.py dump.bin --extras      # 印出公鑰 / 簽章 / manifest 原始資料
+python verify_cli.py dump.bin --config-out config.json
+python verify_cli.py dump.bin --ec-base 0x4000 --pubkey-addr 0x34000
+```
 
 ## 技術規格
 
-### 支援的檔案格式
-- NIST BIOS Bin 檔案 (`.bin`)
+### NVRSV 結構（V2.1）
 
-### 解析結構
-- **Header**: 0x00000000 (1024 bytes)
-- **RSA 公鑰**: 0x00034000 (RSA-2048: 256 bytes / RSA-4096: 512 bytes)
-- **NV_RSV**: 可變位址 (61440 bytes + 簽名)
-- **IBB**: 可變位址與大小 (+ 簽名)
-- **WBIO**: 可變位址與大小 (+ 簽名)
+| 位移 | 內容 |
+|---|---|
+| `+0x00` | `_NV_RSV_` 標記 |
+| `+0x08` / `+0x0C` | 版本 / 結構大小 |
+| `+0x10` / `+0x14` | BIOS version / SVN |
+| `+0x18` | hash_count（manifest 數量）|
+| `+0x40` | HashManifest[0]（每筆 `0x10` + hash 長度）|
+| manifests 之後 | `_NVD` info（V2.1 才有，`0x10` bytes）|
+| 之後 | 簽章 header `NVRS`（TBS / scheme / param）|
+| 之後 | 簽章值（ML-DSA-87 = 4627 bytes）|
 
-### 簽名驗證機制
+### 簽章
 
-- **RSA-2048**: PKCS#1 v1.5，SHA-256 雜湊，256 bytes 簽名
-- **RSA-4096**: PKCS#1 v1.5，SHA-384 雜湊，512 bytes 簽名
+- **ML-DSA-87**：scheme `0x00A1`，公鑰 2592 B，簽章 4627 B（V2.1）
+- **RSA**：PKCS#1 v1.5，RSA-2048 + SHA-256 / RSA-4096 + SHA-384（V2.0 image）
+
+### NVD
+
+`_NVD` 記錄資料位移、大小、hash algo 與 hash 存放位移（實測 `0xF000`）；
+digest 只在 **backup** 側作為 gate。
 
 ## 常見問題
 
-### Q1: 為什麼我的 bin 檔案無法開啟？
-**A**: 請確認：
-- 檔案副檔名為 `.bin`
-- 檔案符合 NIST BIOS 格式規範
-- 檔案未損毀或加密
+### Q1：為什麼顯示「不是有效的 flash dump」？
+**A**：檔案裡找不到 Flash Descriptor（`FLVALSIG = 0x0FF0A55A` @`0x10`）。
+請確認是**完整 flash dump**，而不是只截 BIOS region。
 
-### Q2: 所有區域都顯示「✗ 失敗」是什麼原因？
-**A**: 可能原因包括：
-- 檔案格式不正確
-- RSA 公鑰位址錯誤
-- 檔案已被修改或損毀
-- 不符合 NIST BIOS 規範
+### Q2：PQC 顯示「未執行（缺公鑰）」怎麼辦？
+**A**：BIOS ROM 內 `EC 起點 + 0x30000` 是空白的，同目錄也沒有 EC 檔。
+把對應的 EC image（內含 2592 B 公鑰）放在 BIOS 同一個資料夾，或用
+`--key EC_release.bin` 指定。**沒有金鑰就不能算通過。**
 
-### Q3: 如何匯出分析報告？
-**A**: 程式會自動在執行檔所在目錄生成 HTML 格式報告 (`report_檔名.html`)，並在預設瀏覽器中開啟
+### Q3：backup 顯示 FALLBACK 是什麼意思？
+**A**：`PDR + 0x180000 / 0x1E0000 / 0x200000` 三個候選都沒有 `_NV_RSV_`，
+改用在 image 內掃到的第二個 `_NV_RSV_`。這代表這顆 BIOS 的 PDR 位移不是常見值，
+位址仍然可用，但要知道它不是「算出來的」。
 
-### Q4: PDR 驗證是什麼？我需要啟用嗎？
-**A**: PDR (Platform Data Region) 是 BIOS 中的備份區域，包含 NVRSV、IBB、WBIO 的備份資料。若您的 bin 檔案包含 PDR 區域且需要驗證備份資料的完整性，可在設定中啟用此功能
+### Q4：某個 manifest 一直 FAIL？
+**A**：先看「manifest 與 NVD 重疊」警告 —— manifest 的 hash 範圍如果吃到 NVRAM
+（`_NVD`）區域，任何變數寫入都會讓該 hash 永遠不過。這是 manifest 定義本身的問題，
+不是驗證程式。
 
-### Q5: 如何修改公鑰位址？
-**A**: 透過功能表 **設定 → 公鑰位址與PDR設定**，輸入新的位址（十六進位格式，如 0x00034000），儲存後重新載入檔案即可
+### Q5：primary 的 NVD digest 為什麼是警告不是失敗？
+**A**：primary 的 NVD 是活資料，digest 從寫下那一刻就過期。只有 backup 側
+（快照）的 digest 才當作 recovery 前的 gate。
 
-## 技術支援
+### Q6：V2.0 的 BIOS 可以驗嗎？
+**A**：可以，但會顯示 `格式版本 V2（無 _NVD）` 並判 FAIL —— 這是 V2.1 驗證工具。
+V2.0 的 x86 結構仍會照常解析、hash 與簽章也會驗，方便你分辨「結構不對」還是「簽章不對」。
 
-如果您遇到問題或有功能建議，請：
-
-1. 查閱本文件的「常見問題」章節
-2. 在 [Issues](https://github.com/Yulin-9527/NIST_Analyzer/issues) 頁面提交問題
-3. 提供詳細的錯誤訊息和復現步驟
+### Q7：需要連網嗎？
+**A**：不需要。全程離線，也不會寫入任何 flash。
 
 ## 版本歷程
 
-### v1.0.6 (2026-02-04)
+### v1.1 (2026-11)
 
-- **新增 RSA-4096 簽名驗證支援**
-  - 支援 RSA-4096 + SHA-384 驗證機制
-  - 設定介面可切換 RSA-2048 / RSA-4096
-  - PDR 備份區塊簽名讀取長度依 RSA 金鑰大小自動調整
-- **新增略過 Header 模式**
-  - 支援無 Header 的 bin 檔案分析
-  - 可手動指定 NV_RSV 起始位址與 BIOS 起始位址
-  - 略過 Header 時，PDR Base Address 直接作為備份 NV_RSV 起點（無 flash descriptor）
-- **修正 PDR 備份區塊解析邏輯**
-  - 修正 skip_header 模式下 backup IBB/WBIO 位址計算錯誤
-  - 修正 PDR 簽名讀取從硬編碼 256 bytes 改為依 RSA 金鑰大小動態調整
+- 全新 V2.1 驗證核心：自動位址推導、PQC（ML-DSA-87）、NVD digest
+- 位址來源標示 DYNAMIC / FALLBACK / NONE；backup 多常數自動 probe
+- PQC 缺公鑰 = FAIL，新增「驗證摘要」群組
+- 建議 firmware 旗標（`oem_project.h` 片段）與舊版 `config.json` 匯出
+- 原始資料檢視（公鑰 / 簽章前後 256 B、manifest stored vs computed 逐 byte 對照）
+- 四分頁介面、選單列與「關於」（`F1`）、CLI 擴充（`--extras` / `--ec-base` / `--pubkey-addr`）
 
-### v1.0.5 (2025-11-28)
+### v1.0.6 (2026-02-04) — 舊版 `NIST_Analyzer`
 
-- **新增 PDR 備份區塊驗證功能**
-  - 支援解析 PDR (Platform Data Region) 備份區域
-  - 驗證 Backup NVRSV、Backup IBB、Backup WBIO 簽名
-  - 可選擇性啟用/停用 PDR 驗證
-  - PDR 架構圖獨立顯示於報告中
-- **新增設定檔系統**
-  - 實作 `config.json` 設定檔持久化保存
-  - 可自訂公鑰位址 (Public Key Address)
-  - 可設定 PDR 基底位址 (PDR Base Address)
-  - 設定於程式重啟後自動載入
-- **介面優化**
-  - 主畫面顯示當前公鑰位址與 PDR 驗證狀態
-  - 新增「設定」選單，提供公鑰與 PDR 參數調整介面
-  - PDR 驗證結果整合至摘要視窗
-  - 報告新增 PDR 區塊頁籤
-- **報告格式改進**
-  - 將報告格式從 Markdown 改為 HTML
-  - 報告自動在預設瀏覽器中開啟
-  - 支援互動式頁籤切換 (主區塊/PDR 區塊)
-  - 架構圖依位址自動排序顯示
+- 新增 RSA-4096 簽名驗證（SHA-384）
+- 新增略過 Header 模式（手動指定 NV_RSV / BIOS 起始位址）
+- 修正 PDR 備份區塊解析邏輯
 
-### v1.0.1 (2025-11-10)
+### v1.0.5 (2025-11-28) — 舊版 `NIST_Analyzer`
 
-- 首次發布
-- 支援 NIST BIOS Bin 檔案解析
-- RSA-2048 簽名驗證功能
-- 圖形化使用者介面
-- 深色主題
-- 拖放檔案支援
-- 詳細分析報告生成
-- 書籤導航功能
+- 新增 PDR 備份區塊驗證（Backup NVRSV / IBB / WBIO）
+- 設定檔 `config.json` 持久化
+- 報告改為 HTML
+
+### v1.0.1 (2025-11-10) — 舊版 `NIST_Analyzer`
+
+- 首次發布：NIST BIOS Bin 解析、RSA-2048 驗證、圖形化介面
 
 ## 授權條款
 
@@ -213,21 +238,21 @@
 
 ## 致謝
 
-- 使用 [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) 開發圖形介面
-- 使用 [PyCryptodome](https://www.pycryptodome.org/) 實現 RSA 驗證
-- 使用 [Mistune](https://github.com/lepture/mistune) 進行 Markdown 渲染
+- 使用 [PyQt5](https://pypi.org/project/PyQt5/) 開發圖形介面
+- 使用 [dilithium-py](https://github.com/GiacomoPope/dilithium-py) 實作 ML-DSA-87 驗證
+- 使用 [PyCryptodome](https://www.pycryptodome.org/) 實現 V2.0 的 RSA 驗證
 
 ## 安全聲明
 
-本工具僅用於合法的 BIOS 檔案分析與驗證用途。使用者應遵守所有適用的法律法規，不得將本工具用於任何非法目的。
+本工具僅用於合法的 BIOS 檔案分析與驗證用途。使用者應遵守所有適用的法律法規，
+不得將本工具用於任何非法目的。
 
 ---
 
 **⭐ 如果這個專案對您有幫助，請給我們一個星星！**
 
 #### [喜歡的話歡迎給個打賞吧!](https://ganknow.com/yulin9527/tip)
-#### 歡迎用 BTC 支援：  
+#### 歡迎用 BTC 支援：
 #### [bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e](https://blockstream.info/address/bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e)
 #### 掃描 QR Code 進行 BTC 捐贈：
 ![BTC Donate QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e)
-](https://github.com/Yulin-9527/NIST_Analyzer/releases/tag/V2.1)
