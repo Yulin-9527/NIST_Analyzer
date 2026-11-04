@@ -1,4 +1,4 @@
-# NIST Bin 分析工具
+[# NIST Bin 分析工具
 
 ![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -230,3 +230,4 @@
 #### [bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e](https://blockstream.info/address/bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e)
 #### 掃描 QR Code 進行 BTC 捐贈：
 ![BTC Donate QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:bc1px0u84lk50jugxzwrcu26h2gsd00ef78pqplrr7sv96qgt8fgnrqqur0x7e)
+](https://github.com/Yulin-9527/NIST_Analyzer/releases/tag/V2.1)
